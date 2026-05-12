@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>TWV Booking — Auto Load</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:13px;color:#1a1a1a;background:#f5f5f0}
+.header{background:#1a1a1a;color:#fff;padding:10px 16px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+.header h1{font-size:14px;font-weight:600}
+.header-right{display:flex;align-items:center;gap:8px}
+.status-bar{font-size:11px;color:#aaa;padding:7px 16px;background:#111;display:flex;align-items:center;gap:8px;min-height:28px}
+.status-bar.ok{color:#4ade80}
+.status-bar.err{color:#f87171}
+.status-bar.loading{color:#facc15}
+.bookings-bar{background:#fff;border-bottom:1px solid #e5e5e0;padding:8px 16px}
+.bar-label{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:#999;margin-bottom:6px}
+.chips{display:flex;gap:6px;flex-wrap:wrap;min-height:26px;align-items:center}
+.chip{padding:4px 10px;border:1px solid #e0e0da;border-radius:20px;font-size:11px;color:#444;cursor:pointer;background:#fafafa;white-space:nowrap;transition:all .12s}
+.chip:hover,.chip.active{background:#1a1a1a;color:#fff;border-color:#1a1a1a}
+.chip.new-badge::after{content:'NEW';font-size:8px;background:#22c55e;color:#fff;border-radius:10px;padding:1px 4px;margin-left:5px;vertical-align:middle}
+.state-msg{font-size:11px;color:#999}
+.layout{display:grid;grid-template-columns:1fr 1fr;min-height:calc(100vh - 118px)}
+@media(max-width:720px){.layout{grid-template-columns:1fr}}
+.left{padding:14px;overflow-y:auto}
+.right{background:#fff;border-left:1px solid #e5e5e0;padding:14px;display:flex;flex-direction:column;position:sticky;top:0;height:calc(100vh - 118px);overflow-y:auto}
+.sec{background:#fff;border:1px solid #e5e5e0;border-radius:10px;padding:12px 14px;margin-bottom:10px}
+.sec-title{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:#999;margin-bottom:9px}
+.fr{display:grid;gap:6px;margin-bottom:6px}
+.fr2{grid-template-columns:1fr 1fr}.fr3{grid-template-columns:1fr 1fr 1fr}
+.fg{display:flex;flex-direction:column;gap:3px}
+.fg label{font-size:10px;color:#888}
+input,select,textarea{font-family:inherit;font-size:12px;color:#1a1a1a;background:#fafafa;border:1px solid #e0e0da;border-radius:6px;padding:5px 8px;width:100%;outline:none}
+input:focus,select:focus,textarea:focus{border-color:#666;background:#fff}
+.rate-box{font-size:11px;color:#666;padding:6px 9px;background:#f5f5f0;border-radius:6px;margin-bottom:9px;min-height:28px}
+.rate-box strong{color:#1a1a1a}
+.addon-row{display:flex;align-items:center;gap:7px;padding:4px 0;border-bottom:1px solid #f0f0ea;font-size:11px}
+.addon-row:last-child{border-bottom:none}
+.addon-row input[type=checkbox]{width:auto}
+.addon-price{margin-left:auto;color:#aaa;font-size:10px}
+.price-summary{border-top:1px solid #e5e5e0;padding-top:7px;margin-top:7px}
+.price-row{display:flex;justify-content:space-between;padding:3px 0;font-size:11px;color:#666}
+.price-row.balance{font-weight:600;font-size:12px;color:#1a1a1a}
+.preview{background:#f5f5f0;border:1px solid #e5e5e0;border-radius:8px;padding:12px;font-size:11.5px;white-space:pre-wrap;font-family:Arial,Helvetica,sans-serif;line-height:1.75;flex:1;color:#1a1a1a;min-height:120px}
+.btn-row{display:flex;gap:7px;margin-top:10px;flex-wrap:wrap}
+button{font-family:inherit;font-size:12px;cursor:pointer;padding:6px 13px;border:1px solid #ccc;border-radius:6px;background:#fff;color:#1a1a1a;transition:background .12s}
+button:hover{background:#f0f0ea}
+button.primary{background:#1a1a1a;color:#fff;border-color:#1a1a1a}
+button.primary:hover{background:#333}
+button.green{background:#16a34a;color:#fff;border-color:#16a34a}
+button.green:hover{background:#15803d}
+.warn{font-size:10px;color:#d97706;margin-top:2px;display:none}
+.setup-banner{background:#fefce8;border:1px solid #fde047;border-radius:8px;padding:12px;font-size:12px;line-height:1.6;color:#713f12}
+.setup-banner strong{color:#92400e}
+.setup-banner code{background:#fef9c3;padding:1px 4px;border-radius:3px;font-size:11px}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>Two Wheel Ventures CDO — Booking Confirmation</h1>
+  <div class="header-right">
+    <button onclick="loadBookings()" style="border-color:rgba(255,255,255,.3);background:transparent;color:#fff;font-size:11px">↺ Refresh</button>
+  </div>
+</div>
+
+<div class="status-bar" id="statusBar">Connecting to Google Sheets…</div>
+
+<div class="bookings-bar">
+  <div class="bar-label">Recent bookings — click to load</div>
+  <div class="chips" id="chips"><span class="state-msg">Loading…</span></div>
+</div>
+
+<div class="layout">
+<div class="left">
+
+  <div class="sec" id="setupBanner" style="display:none">
+    <div class="setup-banner">
+      <strong>⚠️ Sheet not accessible.</strong> To auto-load bookings, share your Form Responses sheet:<br>
+      1. Open your Google Sheet → click <strong>Share</strong><br>
+      2. Under "General access" → set to <strong>"Anyone with the link"</strong> → <strong>Viewer</strong><br>
+      3. Copy the Sheet ID from the URL and paste it below, then click Save.<br><br>
+      Sheet ID: <input id="sheetIdInput" placeholder="1d9uiN099hpoBSrRiM4O8GNWIjijxbhH9tWpbh_Lm_iw" style="width:400px;font-size:11px;padding:4px 7px">
+      <button onclick="saveSheetId()" style="margin-left:6px;font-size:11px;padding:4px 10px">Save &amp; Retry</button>
+    </div>
+  </div>
+
+  <div class="sec">
+    <p class="sec-title">Renter details</p>
+    <div class="fr fr2">
+      <div class="fg"><label>Email</label><input id="email" type="email" oninput="generateAndShow()"></div>
+      <div class="fg"><label>Phone</label><input id="phone" oninput="generateAndShow()"></div>
+    </div>
+    <div class="fr fr3">
+      <div class="fg"><label>First name</label><input id="fname" oninput="generateAndShow()"></div>
+      <div class="fg"><label>Last name</label><input id="lname" oninput="generateAndShow()"></div>
+      <div class="fg"><label>ZIP</label><input id="zip" oninput="generateAndShow()"></div>
+    </div>
+    <div class="fr fr3">
+      <div class="fg"><label>Address</label><input id="addr" oninput="generateAndShow()"></div>
+      <div class="fg"><label>Barangay</label><input id="brgy" oninput="generateAndShow()"></div>
+      <div class="fg"><label>City</label><input id="city" oninput="generateAndShow()"></div>
+    </div>
+  </div>
+
+  <div class="sec">
+    <p class="sec-title">Booking details</p>
+    <div class="fr fr2">
+      <div class="fg">
+        <label>Vehicle</label>
+        <select id="vehicle" onchange="onVehicleChange()">
+          <option value="">— select —</option>
+          <option>Honda Beat 110 Black</option><option>Honda Beat 110 White</option>
+          <option>Mio Gear 125</option><option>Aerox 155 Ver 2</option>
+          <option>Click 125 Ver 3 Blue</option><option>Click 125 Ver 3 Black</option>
+          <option>Click 125 V3 Red</option><option>Fazzio 125 Red</option>
+          <option>PCX 160 White</option><option>PCX 160 Black</option>
+          <option>ADV 160 Red</option><option>Spresso AT 2025</option>
+        </select>
+      </div>
+      <div class="fg"><label>Duration (days)</label><input id="numDays" type="number" min="1" value="1" oninput="updateRate();generateAndShow()"></div>
+    </div>
+    <div class="fr fr2">
+      <div class="fg"><label>Pickup date</label><input id="puDate" oninput="generateAndShow()"></div>
+      <div class="fg"><label>Pickup time</label><input id="puTime" oninput="generateAndShow()"></div>
+    </div>
+    <div class="fr fr2">
+      <div class="fg"><label>Return date</label><input id="retDate" oninput="generateAndShow()"></div>
+      <div class="fg"><label>Return time</label><input id="retTime" oninput="generateAndShow()"></div>
+    </div>
+    <div class="fr fr2">
+      <div class="fg">
+        <label>Destination (free text)</label>
+        <input id="destRaw" placeholder="e.g. Manolo Fortich" oninput="generateAndShow()">
+      </div>
+      <div class="fg">
+        <label>Rate zone</label>
+        <select id="destZone" onchange="updateRate();generateAndShow()">
+          <option value="">— select zone —</option>
+          <optgroup label="No surcharge / Spresso ₱1,300">
+            <option>City Drive</option><option>Opol</option><option>El Salvador</option>
+          </optgroup>
+          <optgroup label="+₱100 / Spresso ₱1,500">
+            <option>Lagonglong</option><option>Balingasag</option><option>Salay</option><option>Binuangan</option>
+            <option>Sugbongcogon</option><option>Kinoguitan</option><option>Balingoan</option><option>Talisayan</option>
+            <option>Medina</option><option>Jasaan</option><option>Claveria</option><option>Villanueva</option>
+            <option>Tagoloan</option><option>Laguindingan</option><option>Gitagum</option><option>Libertad</option>
+            <option>Alubijid</option><option>Initao</option><option>Naawan</option><option>Manticao</option>
+            <option>Lugait</option><option>Baungon</option><option>Damulog</option><option>Libona</option>
+            <option>Impasug-ong</option><option>Malitbog</option><option>Manolo Fortich</option>
+            <option>Sumilao</option><option>Talakag</option><option>Cabanglasan</option><option>Iligan City</option>
+            <option>Bacolod LDN</option><option>Baroy LDN</option><option>Kauswagan LDN</option>
+            <option>Kolambugan LDN</option><option>Linamon LDN</option><option>Maigo LDN</option><option>Tubod LDN</option>
+          </optgroup>
+          <optgroup label="+₱200 / Spresso ₱1,700">
+            <option>Gingoog</option><option>Magsaysay</option><option>Kadingilan</option><option>Kalilangan</option>
+            <option>Don Carlos</option><option>Lantapan</option><option>Maramag</option><option>Pangantucan</option>
+            <option>Malaybalay City</option><option>Valencia City</option>
+          </optgroup>
+          <optgroup label="+₱300 / Spresso ₱1,800">
+            <option>Dangcagan</option><option>Kibawe</option><option>Kitaotao</option><option>Quezon</option>
+            <option>San Fernando</option><option>Lala LDN</option><option>Kapatagan LDN</option>
+          </optgroup>
+          <optgroup label="+₱500 / Spresso ₱2,000–2,300">
+            <option>Davao City</option><option>Surigao</option><option>Butuan City</option>
+            <option>Tangub</option><option>Ozamis City</option><option>Pagadian</option><option>Dipolog</option>
+          </optgroup>
+          <optgroup label="+₱800 / Spresso ₱2,500">
+            <option>Within Davao Region</option>
+          </optgroup>
+        </select>
+        <span class="warn" id="zoneWarn"></span>
+      </div>
+    </div>
+    <div class="fr fr2">
+      <div class="fg"><label>Purpose of travel</label><input id="purpose" oninput="generateAndShow()"></div>
+      <div class="fg"><label>Release / drop-off location</label><input id="releaseLoc" oninput="generateAndShow()"></div>
+    </div>
+    <div class="fg" style="margin-top:4px">
+      <label>Inclusions (one per line)</label>
+      <textarea id="inclusions" style="height:56px;resize:vertical" oninput="generateAndShow()"></textarea>
+    </div>
+  </div>
+
+  <div class="sec">
+    <p class="sec-title">Pricing</p>
+    <div class="rate-box" id="rateBreakdown">Select vehicle and rate zone.</div>
+    <p style="font-size:10px;color:#999;margin:6px 0 3px">Add-ons</p>
+    <div class="addon-row"><input type="checkbox" id="mw" checked onchange="updateRate();generateAndShow()"><label for="mw" id="mw_label">Motorwash</label><span id="mw_price" class="addon-price">₱80</span></div>
+    <div class="addon-row"><input type="checkbox" id="pu_city" onchange="updateRate();generateAndShow()"><label for="pu_city">PU City</label><span class="addon-price">₱300</span></div>
+    <div class="addon-row"><input type="checkbox" id="do_city" onchange="updateRate();generateAndShow()"><label for="do_city">DO City</label><span class="addon-price">₱300</span></div>
+    <div class="addon-row"><input type="checkbox" id="pu_airport" onchange="updateRate();generateAndShow()"><label for="pu_airport">PU Airport (Laguindingan)</label><span class="addon-price">₱600</span></div>
+    <div class="addon-row"><input type="checkbox" id="do_airport" onchange="updateRate();generateAndShow()"><label for="do_airport">DO Airport (Laguindingan)</label><span class="addon-price">₱600</span></div>
+    <div class="addon-row"><input type="checkbox" id="topbox" onchange="updateRate();generateAndShow()"><label for="topbox">Top Box</label><span class="addon-price">₱200</span></div>
+    <div class="addon-row"><input type="checkbox" id="driver" onchange="updateRate();generateAndShow()"><label for="driver">Driver (12h Day Tour)</label><span class="addon-price">₱1,000</span></div>
+    <div class="price-summary">
+      <div class="price-row"><span>Total Rental</span><span id="totalDisplay">—</span></div>
+      <div class="price-row"><span>Reservation Fee (paid)</span><span>− ₱500</span></div>
+      <div class="price-row balance"><span>Remaining Balance on Pickup</span><span id="balanceDisplay">—</span></div>
+    </div>
+  </div>
+
+</div>
+<div class="right">
+  <p class="sec-title" style="margin-bottom:9px">Confirmation preview</p>
+  <div class="preview" id="confirmPreview">Select a booking from the top bar to get started.</div>
+  <div class="btn-row">
+    <button class="primary" onclick="generateAndShow()">Generate</button>
+    <button id="copyBtn" onclick="copyText()">Copy Text</button>
+    <button onclick="clearAll()">Clear</button>
+  </div>
+</div>
+</div>
+
+<script>
+// ─── CONFIG ───────────────────────────────────────────────────────────────────
+// Sheet ID is saved in localStorage so you can change it via the setup banner.
+// Default: your FORM RESPONSES sheet
+const DEFAULT_SHEET_ID = '1d9uiN099hpoBSrRiM4O8GNWIjijxbhH9tWpbh_Lm_iw';
+function getSheetId(){ return localStorage.getItem('twv_sheet_id') || DEFAULT_SHEET_ID; }
+function saveSheetId(){
+  const v = document.getElementById('sheetIdInput').value.trim();
+  if(v){ localStorage.setItem('twv_sheet_id', v); loadBookings(); }
+}
+
+// ─── RATE TABLES ──────────────────────────────────────────────────────────────
+const CITY_RATE={
+  "Honda Beat 110 Black":500,"Honda Beat 110 White":500,"Mio Gear 125":500,
+  "Aerox 155 Ver 2":800,"Click 125 Ver 3 Blue":600,"Click 125 Ver 3 Black":600,
+  "Click 125 V3 Red":600,"Fazzio 125 Red":600,"PCX 160 White":800,
+  "PCX 160 Black":800,"ADV 160 Red":1000
+};
+const SURCHARGE={
+  "City Drive":0,"Opol":0,"El Salvador":0,
+  "Lagonglong":100,"Balingasag":100,"Salay":100,"Binuangan":100,"Sugbongcogon":100,
+  "Kinoguitan":100,"Balingoan":100,"Talisayan":100,"Medina":100,"Jasaan":100,
+  "Claveria":100,"Villanueva":100,"Tagoloan":100,"Laguindingan":100,"Gitagum":100,
+  "Libertad":100,"Alubijid":100,"Initao":100,"Naawan":100,"Manticao":100,
+  "Lugait":100,"Baungon":100,"Damulog":100,"Libona":100,"Impasug-ong":100,
+  "Malitbog":100,"Manolo Fortich":100,"Sumilao":100,"Talakag":100,"Cabanglasan":100,
+  "Iligan City":100,"Bacolod LDN":100,"Baroy LDN":100,"Kauswagan LDN":100,
+  "Kolambugan LDN":100,"Linamon LDN":100,"Maigo LDN":100,"Tubod LDN":100,
+  "Gingoog":200,"Magsaysay":200,"Kadingilan":200,"Kalilangan":200,"Don Carlos":200,
+  "Lantapan":200,"Maramag":200,"Pangantucan":200,"Malaybalay City":200,"Valencia City":200,
+  "Dangcagan":300,"Kibawe":300,"Kitaotao":300,"Quezon":300,"San Fernando":300,
+  "Lala LDN":300,"Kapatagan LDN":300,
+  "Davao City":500,"Surigao":500,"Butuan City":500,"Tangub":500,"Ozamis City":500,
+  "Pagadian":500,"Dipolog":500,"Within Davao Region":800
+};
+const SPRESSO_RATE={
+  "City Drive":1300,"Opol":1300,"El Salvador":1300,
+  "Lagonglong":1500,"Balingasag":1500,"Salay":1500,"Binuangan":1500,"Sugbongcogon":1500,
+  "Kinoguitan":1500,"Balingoan":1500,"Talisayan":1500,"Medina":1500,"Jasaan":1500,
+  "Claveria":1500,"Villanueva":1500,"Tagoloan":1500,"Laguindingan":1500,"Gitagum":1500,
+  "Libertad":1500,"Alubijid":1500,"Initao":1500,"Naawan":1500,"Manticao":1500,
+  "Lugait":1500,"Baungon":1500,"Damulog":1500,"Libona":1500,"Impasug-ong":1500,
+  "Malitbog":1500,"Manolo Fortich":1500,"Sumilao":1500,"Talakag":1500,"Cabanglasan":1500,
+  "Iligan City":1500,"Bacolod LDN":1500,"Baroy LDN":1500,"Kauswagan LDN":1500,
+  "Kolambugan LDN":1500,"Linamon LDN":1500,"Maigo LDN":1500,"Tubod LDN":1500,
+  "Lala LDN":1500,"Kapatagan LDN":1500,
+  "Gingoog":1700,"Magsaysay":1700,"Kadingilan":1700,"Kalilangan":1700,"Don Carlos":1700,
+  "Lantapan":1700,"Maramag":1700,"Pangantucan":1700,"Malaybalay City":1700,"Valencia City":1700,
+  "Dangcagan":1800,"Kibawe":1800,"Kitaotao":1800,"Quezon":1800,"San Fernando":1800,
+  "Davao City":2000,"Surigao":2000,"Butuan City":2000,"Tangub":2000,"Ozamis City":2000,
+  "Pagadian":2300,"Dipolog":2300,"Within Davao Region":2500
+};
+const RESERVATION_FEE=500;
+let ADDON_PRICES={"mw":80,"pu_city":300,"do_city":300,"pu_airport":600,"do_airport":600,"topbox":200,"driver":1000};
+
+// ─── CSV FETCH & PARSE ────────────────────────────────────────────────────────
+function parseCSV(text){
+  const rows=[];
+  for(const line of text.split('\n')){
+    if(!line.trim())continue;
+    const cols=[];let inQ=false,cur='';
+    for(let i=0;i<line.length;i++){
+      const c=line[i];
+      if(c==='"'){if(inQ&&line[i+1]==='"'){cur+='"';i++;}else inQ=!inQ;}
+      else if(c===','&&!inQ){cols.push(cur);cur='';}
+      else cur+=c;
+    }
+    cols.push(cur);rows.push(cols);
+  }
+  return rows;
+}
+
+function setStatus(msg, type=''){
+  const bar = document.getElementById('statusBar');
+  bar.textContent = msg;
+  bar.className = 'status-bar' + (type ? ' '+type : '');
+}
+
+let allRows=[];
+let lastSeenTimestamp = localStorage.getItem('twv_last_ts') || '';
+
+async function loadBookings(){
+  const chips=document.getElementById('chips');
+  chips.innerHTML='<span class="state-msg">Loading…</span>';
+  setStatus('Fetching form responses…', 'loading');
+  const sheetId = getSheetId();
+  const url = `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv`;
+  try{
+    const res = await fetch(url);
+    if(!res.ok) throw new Error('HTTP '+res.status+' — sheet may not be publicly shared');
+    const text = await res.text();
+    if(text.trim().startsWith('<!DOCTYPE')||text.trim().startsWith('<html'))
+      throw new Error('Got HTML instead of CSV — sheet is not publicly shared');
+    const rows = parseCSV(text);
+    allRows = rows.slice(1).filter(r=>r[0]&&r[1]);
+    document.getElementById('setupBanner').style.display='none';
+    if(!allRows.length){
+      chips.innerHTML='<span class="state-msg">No submissions yet.</span>';
+      setStatus('Connected — no bookings found', 'ok');
+      return;
+    }
+    const recent=[...allRows].reverse().slice(0,10);
+    const latestTs = allRows[allRows.length-1][0];
+    const hasNew = lastSeenTimestamp && latestTs !== lastSeenTimestamp;
+    chips.innerHTML='';
+    recent.forEach((row,i)=>{
+      const name=((row[3]||'')+' '+(row[4]||'')).trim()||row[1];
+      const vehicle=(row[16]||'').split(' ').slice(0,3).join(' ');
+      const date=row[12]||'';
+      const isLatest = i===0;
+      const chip=document.createElement('span');
+      chip.className='chip'+(isLatest&&hasNew?' new-badge':'');
+      chip.textContent=name+' · '+vehicle+(date?' · '+date:'');
+      chip.dataset.idx=allRows.length-1-i;
+      chip.onclick=function(){
+        document.querySelectorAll('.chip').forEach(c=>c.classList.remove('active'));
+        chip.classList.add('active');
+        loadRow(allRows[parseInt(chip.dataset.idx)]);
+      };
+      chips.appendChild(chip);
+    });
+    // Auto-load the most recent on page load
+    if(allRows.length){
+      document.querySelectorAll('.chip')[0]?.classList.add('active');
+      loadRow(allRows[allRows.length-1]);
+      localStorage.setItem('twv_last_ts', latestTs);
+      lastSeenTimestamp = latestTs;
+    }
+    const count = allRows.length;
+    const lastTime = allRows[allRows.length-1][0];
+    setStatus(`✓ Connected · ${count} booking${count!==1?'s':''} · Latest: ${lastTime}`, 'ok');
+  }catch(e){
+    chips.innerHTML='<span class="state-msg" style="color:#c00">'+e.message+'</span>';
+    setStatus('⚠ Could not load sheet — '+e.message, 'err');
+    document.getElementById('setupBanner').style.display='block';
+    document.getElementById('sheetIdInput').value = sheetId;
+  }
+}
+
+// ─── ROW POPULATION ───────────────────────────────────────────────────────────
+function toTC(s){return(s||'').replace(/\b\w/g,c=>c.toUpperCase());}
+function cleanRel(s){return s.replace(/\s*-\s*\([^)]*\)\s*$/,'').replace(/\s*\([^)]*\)\s*$/,'').trim();}
+
+function matchZone(dest){
+  const zSel=document.getElementById('destZone');
+  const dl=dest.toLowerCase().trim();
+  for(let o of zSel.options){if(o.value&&o.value.toLowerCase()===dl)return{ok:true,exact:true,v:o.value};}
+  let best='',bestLen=0;
+  for(let o of zSel.options){if(!o.value)continue;const ol=o.value.toLowerCase();if(dl.includes(ol)&&ol.length>bestLen){best=o.value;bestLen=ol.length;}}
+  if(best)return{ok:true,exact:false,v:best};
+  return{ok:false,v:''};
+}
+
+function detectAddons(incRaw,delOpt){
+  const il=(incRaw||'').toLowerCase(),dl=(delOpt||'').toLowerCase();
+  if(il.includes('top box'))document.getElementById('topbox').checked=true;
+  if(il.includes('driver'))document.getElementById('driver').checked=true;
+  if(dl.includes('deliver only within city')||dl.includes('deliver & pick up within city'))document.getElementById('do_city').checked=true;
+  if(dl.includes('pick up only within city')||dl.includes('deliver & pick up within city'))document.getElementById('pu_city').checked=true;
+  if(dl.includes('delivery only at laguindingan')||dl.includes('deliver & pick up at laguindingan'))document.getElementById('do_airport').checked=true;
+  if(dl.includes('pick up only at laguindingan')||dl.includes('deliver & pick up at laguindingan'))document.getElementById('pu_airport').checked=true;
+}
+
+function loadRow(c){
+  const set=(id,v)=>{const e=document.getElementById(id);if(e)e.value=v||'';};
+  set('email',c[1]);set('fname',c[3]);set('lname',c[4]);
+  set('addr',c[5]);set('brgy',c[6]);set('city',c[7]);set('zip',c[9]);set('phone',c[10]);
+  const days=parseInt(c[11],10);
+  document.getElementById('numDays').value=(!isNaN(days)&&days>0)?days:1;
+  set('puDate',c[12]);set('puTime',c[13]);set('retDate',c[14]);set('retTime',c[15]);
+  const vehicle=c[16]||'';
+  const vSel=document.getElementById('vehicle');
+  for(let o of vSel.options){if(o.value.toLowerCase()===vehicle.toLowerCase()){vSel.value=o.value;break;}}
+  const isSpresso=vehicle.toLowerCase().includes('spresso');
+  ADDON_PRICES['mw']=isSpresso?200:80;
+  document.getElementById('mw_label').textContent=isSpresso?'Carwash':'Motorwash';
+  document.getElementById('mw_price').textContent=isSpresso?'₱200':'₱80';
+  set('destRaw',toTC(c[17]));
+  const zr=matchZone(c[17]||'');
+  const zSel=document.getElementById('destZone');
+  const warn=document.getElementById('zoneWarn');
+  if(zr.ok){zSel.value=zr.v;warn.style.display=zr.exact?'none':'block';warn.textContent='Auto-matched to "'+zr.v+'" — verify';}
+  else{zSel.value='';warn.style.display='block';warn.textContent='Zone not found — select manually';}
+  set('purpose',c[19]);
+  const incRaw=c[20]||'',delOpt=c[21]||'',dropArea=c[22]||'';
+  set('releaseLoc',dropArea.trim()||cleanRel(delOpt));
+  document.getElementById('inclusions').value=incRaw.split(/,\s*|\n/).map(s=>s.trim()).filter(Boolean).join('\n');
+  Object.keys(ADDON_PRICES).forEach(k=>{const e=document.getElementById(k);if(e)e.checked=(k==='mw');});
+  detectAddons(incRaw,delOpt);
+  updateRate();generateAndShow();
+}
+
+// ─── PRICING ──────────────────────────────────────────────────────────────────
+function getDays(){const v=parseInt(document.getElementById('numDays').value,10);return(!isNaN(v)&&v>0)?v:1;}
+function getAddonTotal(){return Object.keys(ADDON_PRICES).reduce((s,k)=>{const e=document.getElementById(k);return s+(e&&e.checked?ADDON_PRICES[k]:0);},0);}
+function getDailyRate(v,z){if(!v||!z)return 0;if(v==='Spresso AT 2025')return SPRESSO_RATE[z]||1300;return(CITY_RATE[v]||0)+(SURCHARGE[z]!==undefined?SURCHARGE[z]:0);}
+
+function onVehicleChange(){
+  const v=document.getElementById('vehicle').value;
+  const s=v==='Spresso AT 2025';
+  ADDON_PRICES['mw']=s?200:80;
+  document.getElementById('mw_label').textContent=s?'Carwash':'Motorwash';
+  document.getElementById('mw_price').textContent=s?'₱200':'₱80';
+  updateRate();generateAndShow();
+}
+
+function updateRate(){
+  const vehicle=document.getElementById('vehicle').value;
+  const zone=document.getElementById('destZone').value;
+  const days=getDays();
+  if(!vehicle||!zone){
+    document.getElementById('rateBreakdown').innerHTML='Select vehicle and rate zone.';
+    document.getElementById('totalDisplay').textContent='—';
+    document.getElementById('balanceDisplay').textContent='—';
+    return;
+  }
+  const dr=getDailyRate(vehicle,zone);
+  const base=dr*days,addons=getAddonTotal(),total=base+addons,balance=total-RESERVATION_FEE;
+  let html=vehicle==='Spresso AT 2025'
+    ?'<strong>₱'+dr.toLocaleString()+'/day</strong> (Spresso flat rate for '+zone+')'
+    :'<strong>₱'+(CITY_RATE[vehicle]||0).toLocaleString()+'</strong> city rate'+((SURCHARGE[zone]||0)>0?' + <strong>₱'+(SURCHARGE[zone])+'</strong> surcharge':'')+' = <strong>₱'+dr.toLocaleString()+'/day</strong>';
+  html+=' × '+days+' day'+(days>1?'s':'')+' = <strong>₱'+base.toLocaleString()+'</strong>';
+  if(addons>0)html+=' + ₱'+addons.toLocaleString()+' add-ons';
+  document.getElementById('rateBreakdown').innerHTML=html;
+  document.getElementById('totalDisplay').textContent='₱'+total.toLocaleString();
+  document.getElementById('balanceDisplay').textContent='₱'+balance.toLocaleString();
+}
+
+// ─── TEXT GENERATION ─────────────────────────────────────────────────────────
+function fmtDate(s){if(!s)return'';const d=new Date(s);if(isNaN(d))return s;return d.toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'});}
+function fmtTime(s){
+  if(!s)return'';
+  const m=s.trim().match(/^(\d+):(\d+)(?::\d+)?\s*(AM|PM)?$/i);
+  if(!m)return s;
+  let h=parseInt(m[1]),mn=m[2],ap=m[3]?m[3].toUpperCase():'';
+  if(!ap){ap=h<12?'AM':'PM';if(h===0)h=12;else if(h>12)h-=12;}
+  return h+':'+mn+' '+ap;
+}
+
+function buildText(){
+  const g=id=>(document.getElementById(id).value||'').trim();
+  const name=[g('fname'),g('lname')].filter(Boolean).join(' ');
+  const addrLine=[g('addr'),g('brgy'),g('city')].filter(Boolean).join(', ')+(g('zip')?' '+g('zip'):'');
+  const vehicle=document.getElementById('vehicle').value;
+  const days=getDays(),zone=document.getElementById('destZone').value;
+  const total=getDailyRate(vehicle,zone)*days+getAddonTotal();
+  const balance=total-RESERVATION_FEE;
+  const washLabel=document.getElementById('mw_label').textContent;
+  const washPrice=ADDON_PRICES['mw'];
+  const addonLabels={"mw":washLabel,"pu_city":"PU City","do_city":"DO City","pu_airport":"PU Airport","do_airport":"DO Airport","topbox":"Top Box","driver":"Driver (12h Day Tour)"};
+  let incLines=g('inclusions').split('\n').map(s=>s.trim()).filter(Boolean);
+  if(!incLines.some(l=>l.toLowerCase().includes('motorwash')||l.toLowerCase().includes('carwash')))
+    incLines.push(washLabel+' (₱'+washPrice+')');
+  Object.entries(addonLabels).forEach(([k,label])=>{
+    if(k==='mw')return;
+    const el=document.getElementById(k);
+    if(el&&el.checked&&!incLines.some(l=>l.toLowerCase().includes(label.toLowerCase().split(' ')[0])))
+      incLines.push(label);
+  });
+  return 'BOOKING CONFIRMATION\n\n'
+    +'🧍 Name: '+name+'\n'
+    +'📞 Contact #: '+g('phone')+'\n'
+    +'📍 Address: '+addrLine
+    +'\n\n🛵 Vehicle: '+(vehicle||'—')
+    +'\n📅 Pickup: '+fmtDate(g('puDate'))+(fmtTime(g('puTime'))?' at '+fmtTime(g('puTime')):'')
+    +'\n📅 Return: '+fmtDate(g('retDate'))+(fmtTime(g('retTime'))?' at '+fmtTime(g('retTime')):'')
+    +'\n🕐 Duration: '+days+' day'+(days>1?'s':'')
+    +'\n📍 Destination: '+g('destRaw')
+    +'\n🎒 Purpose of Travel: '+g('purpose')
+    +'\n\n🎒 Inclusions:\n'+incLines.map(l=>'• '+l).join('\n')
+    +'\n\n📍 Release Location: '+g('releaseLoc')
+    +'\n\n💰 Total Rental: ₱'+(total?total.toLocaleString():'—')
+    +'\n💳 Reservation Fee (paid): ₱500'
+    +'\n💵 Remaining Balance on Pickup: ₱'+(balance?balance.toLocaleString():'—')
+    +'\n\nPlease have your valid IDs ready upon pick up for inspection. One valid ID must be deposited upon release of the unit. If you are unable to provide a valid ID for deposit, a ₱1,000 refundable cash deposit will be required instead. Thank you for booking with Two Wheel Ventures CDO.';
+}
+
+function generateAndShow(){document.getElementById('confirmPreview').textContent=buildText();}
+
+function copyText(){
+  navigator.clipboard.writeText(buildText()).then(()=>{
+    const b=document.getElementById('copyBtn');b.textContent='Copied!';
+    setTimeout(()=>b.textContent='Copy Text',2000);
+  }).catch(()=>{
+    const ta=document.createElement('textarea');ta.value=buildText();
+    document.body.appendChild(ta);ta.select();document.execCommand('copy');
+    document.body.removeChild(ta);
+    const b=document.getElementById('copyBtn');b.textContent='Copied!';
+    setTimeout(()=>b.textContent='Copy Text',2000);
+  });
+}
+
+function clearAll(){
+  ['email','phone','fname','lname','zip','addr','brgy','city','puDate','puTime','retDate','retTime','destRaw','purpose','releaseLoc','inclusions'].forEach(id=>{document.getElementById(id).value='';});
+  document.getElementById('vehicle').value='';
+  document.getElementById('destZone').value='';
+  document.getElementById('numDays').value='1';
+  Object.keys(ADDON_PRICES).forEach(k=>{const e=document.getElementById(k);if(e)e.checked=(k==='mw');});
+  ADDON_PRICES['mw']=80;
+  document.getElementById('mw_label').textContent='Motorwash';
+  document.getElementById('mw_price').textContent='₱80';
+  document.getElementById('rateBreakdown').innerHTML='Select vehicle and rate zone.';
+  document.getElementById('totalDisplay').textContent='—';
+  document.getElementById('balanceDisplay').textContent='—';
+  document.getElementById('confirmPreview').textContent='Fill in the form to generate a confirmation.';
+  document.getElementById('zoneWarn').style.display='none';
+  document.querySelectorAll('.chip').forEach(c=>c.classList.remove('active'));
+}
+
+// ─── INIT ─────────────────────────────────────────────────────────────────────
+loadBookings();
+</script>
+</body>
+</html>
